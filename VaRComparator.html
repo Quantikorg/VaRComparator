@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>VaR Comparator — Monte Carlo vs Parametric</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#ffffff;--card:#f9f9f9;--muted:#6b7280;--accent:#38bdf8;--glass: rgba(0,0,0,0.03)}
+    *{box-sizing:border-box;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0;background:var(--bg);color:#1a1a1a;padding:2rem}
+    .container{max-width:1200px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
+    h1{font-size:1.25rem;margin:0}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    .card{background:var(--card);border-radius:12px;padding:1rem;box-shadow:0 6px 18px rgba(0,0,0,0.1);border:1px solid rgba(0,0,0,0.05)}
+    .inputs{display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-bottom:0.6rem}
+    label{font-size:0.78rem;color:var(--muted);display:block;margin-bottom:0.15rem}
+    input,select{width:100%;padding:0.6rem;border-radius:8px;border:1px solid rgba(0,0,0,0.1);background:var(--glass);color:inherit}
+    .full{grid-column:1/-1}
+    .actions{display:flex;gap:0.5rem;align-items:center;margin-top:0.6rem}
+    button{background:linear-gradient(90deg,var(--accent),#4f46e5);border:none;color:white;padding:0.65rem 0.8rem;border-radius:10px;cursor:pointer;font-weight:600}
+    .result{display:flex;flex-direction:column;gap:0.25rem;margin-top:0.8rem}
+    .disclaimer{font-size:0.75rem;color:#ef4444;margin-top:0.4rem;grid-column:1/-1}
+    canvas{max-width:100%;height:240px}
+    footer{margin:40px auto 20px;max-width:920px;text-align:center;font-size:12px;color:#777;font-style:italic}
+    @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jstat@latest/dist/jstat.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Value at Risk Comparator — Monte Carlo vs Parametric</h1>
+      <div style="font-size:0.85rem;color:var(--muted)">Portfolio base: <strong id="portfolioLabel">100,000</strong></div>
+    </header>
+
+    <div class="grid">
+      <!-- Monte Carlo Column -->
+      <section class="card" aria-labelledby="mc-title">
+        <h2 id="mc-title">Monte Carlo Simulation</h2>
+        <div class="inputs" style="margin-top:0.6rem">
+          <div><label>Average annual return (μ) — in %</label><input id="mc_mu" type="number" step="0.01" value="5"></div>
+          <div><label>Annual Std dev (σ) — in %</label><input id="mc_sigma" type="number" step="0.01" value="15"></div>
+          <div><label>Trading days / year</label><input id="mc_days" type="number" step="1" value="252"></div>
+          <div><label>Confidence level</label>
+            <select id="mc_conf">
+              <option value="0.90">90%</option>
+              <option value="0.95">95%</option>
+              <option value="0.975">97.5%</option>
+              <option value="0.99">99%</option>
+              <option value="0.995">99.5%</option>
+              <option value="0.999">99.9%</option>
+            </select>
+          </div>
+          <div><label>Number of simulations</label><input id="mc_sims" type="text" value="20,000"></div>
+          <div class="disclaimer">*Number of simulations cannot exceed 200,000 to prevent browser issues.</div>
+          <div><label>Portfolio value</label><input id="portfolio" type="text" value="100,000"></div>
+          <div class="full"><label>Horizon (days) — for multi-day VaR scaling</label><input id="horizon" type="number" step="1" value="1"></div>
+        </div>
+        <div class="actions"><button id="runMC">Run Monte Carlo</button></div>
+        <div class="result" id="mc_results"></div>
+        <div style="margin-top:0.8rem"><canvas id="mcChart"></canvas></div>
+      </section>
+
+      <!-- Parametric Column -->
+      <section class="card" aria-labelledby="param-title">
+        <h2 id="param-title">Parametric (Analytical) VaR</h2>
+        <div class="inputs" style="margin-top:0.6rem">
+          <div><label>Average annual return (μ) — in %</label><input id="p_mu" type="number" step="0.01" value="5"></div>
+          <div><label>Annual Std dev (σ) — in %</label><input id="p_sigma" type="number" step="0.01" value="15"></div>
+          <div><label>Trading days / year</label><input id="p_days" type="number" step="1" value="252"></div>
+          <div><label>Confidence level</label>
+            <select id="p_conf">
+              <option value="0.90">90%</option>
+              <option value="0.95">95%</option>
+              <option value="0.975">97.5%</option>
+              <option value="0.99">99%</option>
+              <option value="0.995">99.5%</option>
+              <option value="0.999">99.9%</option>
+            </select>
+          </div>
+          <div><label>Portfolio value</label><input id="p_portfolio" type="text" value="100,000"></div>
+          <div class="full"><label>Horizon (days) — for multi-day VaR scaling</label><input id="p_horizon" type="number" step="1" value="1"></div>
+        </div>
+        <div class="actions"><button id="runParam">Compute Parametric VaR</button></div>
+        <div class="result" id="p_results"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    © Quantik.org. All rights reserved. This model, including its code and associated intellectual property, is the exclusive property of Quantik.org and may not be copied, distributed, or replicated without prior written consent. Use of this calculator implies acceptance of these terms.
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded',()=>{
+      function formatInputWithCommas(input){
+        input.addEventListener('input',()=>{
+          let val=input.value.replace(/,/g,'');
+          if(!isNaN(val) && val.length>0){
+            input.value=Number(val).toLocaleString();
+          } else input.value='';
+        });
+      }
+      formatInputWithCommas(document.getElementById('mc_sims'));
+      formatInputWithCommas(document.getElementById('portfolio'));
+      formatInputWithCommas(document.getElementById('p_portfolio'));
+
+      function parseNumber(inputId){
+        return parseFloat(document.getElementById(inputId).value.replace(/,/g,''))||0;
+      }
+      function randn_bm(){
+        let u=0,v=0;
+        while(u===0) u=Math.random();
+        while(v===0) v=Math.random();
+        return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+      }
+
+      let mcChartInstance=null;
+      document.getElementById('runMC').addEventListener('click',()=>{
+        const annualMu=parseNumber('mc_mu')/100;
+        const annualSigma=parseNumber('mc_sigma')/100;
+        const days=parseNumber('mc_days');
+        let sims=parseNumber('mc_sims');
+        const conf=parseNumber('mc_conf');
+        const portfolio=parseNumber('portfolio');
+        const horizon=parseNumber('horizon');
+
+        const mu=annualMu/days;
+        const sigma=annualSigma/Math.sqrt(days);
+
+        if(sims>200000){alert('Number of simulations capped to 200,000'); sims=200000;}
+        const returns=[];
+        for(let i=0;i<sims;i++) returns.push(mu+sigma*randn_bm());
+        returns.sort((a,b)=>a-b);
+        const idx=Math.floor((1-conf)*returns.length);
+        const dailyVaR=-returns[Math.max(0,Math.min(idx,returns.length-1))];
+        const scaledVaR=dailyVaR*portfolio*Math.sqrt(horizon);
+        document.getElementById('mc_results').innerHTML=`Confidence level: ${(conf*100).toFixed(2)}%<br>Daily VaR: $${(dailyVaR*portfolio).toLocaleString(undefined,{maximumFractionDigits:2})} (${(dailyVaR*100).toFixed(2)}%)<br>Scaled VaR: $${scaledVaR.toLocaleString(undefined,{maximumFractionDigits:2})}<br>Simulations: ${sims.toLocaleString()}`;
+
+        const ctx=document.getElementById('mcChart').getContext('2d');
+        const bins=150;
+        const min=Math.min(...returns);
+        const max=Math.max(...returns);
+        const step=(max-min)/bins;
+        const counts=Array(bins).fill(0);
+        returns.forEach(r=>{const i=Math.min(bins-1,Math.floor((r-min)/step));counts[i]++;});
+        const labels=Array.from({length:bins},(_,i)=>(min+i*step).toFixed(4));
+
+        if(mcChartInstance) mcChartInstance.destroy();
+        mcChartInstance=new Chart(ctx,{
+          type:'bar',
+          data:{labels,datasets:[{label:'Simulated returns',data:counts,backgroundColor:'rgba(56,189,248,0.5)'}]},
+          options:{
+            scales:{x:{title:{display:true,text:'Return'}},y:{title:{display:true,text:'Frequency'}}},
+            interaction:{mode:'index',intersect:false},
+            plugins:{tooltip:{enabled:true}},
+            onHover:function(evt){
+              const points=this.getElementsAtEventForMode(evt,'nearest',{intersect:false},true);
+              if(points.length){
+                const ctx=this.ctx;
+                const x=this.scales.x.getPixelForValue(points[0].index);
+                this.update();
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(x,0);
+                ctx.lineTo(x,this.scales.y.height+this.scales.y.top);
+                ctx.strokeStyle='black';
+                ctx.lineWidth=1;
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+          }
+        });
+      });
+
+      document.getElementById('runParam').addEventListener('click',()=>{
+        const annualMu=parseNumber('p_mu')/100;
+        const annualSigma=parseNumber('p_sigma')/100;
+        const days=parseNumber('p_days');
+        const conf=parseFloat(document.getElementById('p_conf').value);
+        const portfolio=parseNumber('p_portfolio');
+        const horizon=parseNumber('p_horizon');
+
+        const mu=annualMu/days;
+        const sigma=annualSigma/Math.sqrt(days);
+
+        const z=jStat.normal.inv(conf,0,1);
+        const dailyVaR=-(mu - z*sigma);
+        const scaledVaR=dailyVaR*portfolio*Math.sqrt(horizon);
+        document.getElementById('p_results').innerHTML=`Confidence level: ${(conf*100).toFixed(2)}%<br>Daily VaR: $${(dailyVaR*portfolio).toLocaleString(undefined,{maximumFractionDigits:2})} (${(dailyVaR*100).toFixed(2)}%)<br>Scaled VaR: $${scaledVaR.toLocaleString(undefined,{maximumFractionDigits:2})}`;
+      });
+    });
+  </script>
+</body>
+</html>
